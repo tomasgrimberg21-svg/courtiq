@@ -1,0 +1,138 @@
+@import "tailwindcss";
+
+/*
+  CourtIQ — Design System (Tailwind v4, CSS-first).
+  Concepto: "data room de NBA meets sala de guerra táctica".
+  Paleta: carbón #0a0a0a · esmeralda #00ff87 · pizarra #1a1a2e.
+  Tipografía: Oswald (display) · Space Mono (números/métricas) · DM Sans (cuerpo).
+*/
+@theme {
+  /* Superficies */
+  --color-base: #0a0a0a;
+  --color-panel: #111119;
+  --color-panel-2: #1a1a2e;
+  --color-line: #24243a;
+
+  /* Texto */
+  --color-ink: #e9e9f2;
+  --color-ink-muted: #8a8aa3;
+
+  /* Marca */
+  --color-brand: #00ff87;
+  --color-brand-strong: #00cc6c;
+
+  /* Semáforo UV_Score */
+  --color-uv-green: #00ff87;
+  --color-uv-gold: #ffd700;
+  --color-uv-white: #cfcfda;
+  --color-uv-red: #ff4444;
+
+  /* Tipografías (variables inyectadas por next/font en el layout) */
+  --font-display: var(--font-oswald), "Oswald", sans-serif;
+  --font-mono: var(--font-space-mono), "Space Mono", ui-monospace, monospace;
+  --font-sans: var(--font-dm-sans), "DM Sans", system-ui, sans-serif;
+
+  /* Animaciones */
+  --animate-shimmer: shimmer 1.5s ease-in-out infinite;
+  --animate-bar-grow: bar-grow 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+/*
+  Tema claro (opcional; el oscuro es el principal). Override de tokens; las utilidades y
+  los inline-styles con var(--color-*) se adaptan solos. Tonos elegidos para contraste AA.
+*/
+[data-theme="light"] {
+  color-scheme: light;
+  --color-base: #f3f4f7;
+  --color-panel: #ffffff;
+  --color-panel-2: #e9ebf1;
+  --color-line: #d6dae2;
+  --color-ink: #14161d;
+  --color-ink-muted: #565d6e;
+  --color-brand: #00a85c;
+  --color-brand-strong: #008f4e;
+  --color-uv-green: #00935a;
+  --color-uv-gold: #9a6b00;
+  --color-uv-white: #5b6170;
+  --color-uv-red: #d22d1f;
+}
+
+html {
+  background-color: var(--color-base);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-base);
+  color: var(--color-ink);
+  /* Grid técnico sutil de fondo */
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--color-line) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--color-line) 35%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-attachment: fixed;
+}
+
+/* Números y métricas en monoespaciada, tabular para que no "bailen" al animar */
+.font-numeric {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Títulos display */
+.font-heading {
+  font-family: var(--font-display);
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+/* Focus ring accesible y visible en TODO elemento interactivo */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-brand) 35%, transparent);
+  color: var(--color-ink);
+}
+
+/* Respeto a prefers-reduced-motion: anula animaciones y transiciones */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
