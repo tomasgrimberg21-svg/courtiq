@@ -1,46 +1,44 @@
 -- CourtIQ — esquema Supabase / PostgreSQL
--- Extensión para gen_random_uuid() (Supabase la trae; declararla es buena práctica en PG puro).
+-- Modelo: BASE COMPARTIDA (sin login). Todos los que entran con la clave de acceso comparten
+-- la misma tabla de jugadores y rosters. La protección real es el gate de la app, no RLS por usuario.
+--
+-- SEGURIDAD (honesto): la anon key viaja en el frontend; cualquiera que la extraiga puede
+-- escribir vía la API de Supabase. Aceptable para un workspace de scouting detrás de un gate
+-- casual. Para multi-tenant real haría falta Supabase Auth + RLS por usuario.
+
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Caché de jugadores buscados
-CREATE TABLE IF NOT EXISTS players_cache (
-  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name         TEXT        NOT NULL,
-  team         TEXT,
-  league       TEXT        NOT NULL,
-  season       TEXT,
-  stats        JSONB       NOT NULL,
-  metrics      JSONB,
-  salary_usd   INTEGER,
-  lqw          DECIMAL(4,2),
-  last_updated TIMESTAMPTZ DEFAULT NOW(),
-  source_url   TEXT
+-- ---------------------------------------------------------------------------
+-- Jugadores cargados (fuente de la verdad compartida). Guardamos el objeto Player completo
+-- como JSONB para no tener que migrar el esquema cada vez que cambia el tipo en la app.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS players (
+  id         TEXT        PRIMARY KEY,          -- id de la app, ej. "manual-..."
+  data       JSONB       NOT NULL,             -- objeto Player completo (name, stats, league, history, etc.)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_players_name   ON players_cache USING GIN(to_tsvector('spanish', name));
-CREATE INDEX IF NOT EXISTS idx_players_league ON players_cache(league);
+CREATE INDEX IF NOT EXISTS idx_players_updated ON players(updated_at DESC);
 
--- Rosters guardados por usuario (FK a auth.users de Supabase Auth)
-CREATE TABLE IF NOT EXISTS saved_rosters (
-  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID        REFERENCES auth.users ON DELETE CASCADE,
+ALTER TABLE players ENABLE ROW LEVEL SECURITY;
+-- Workspace compartido: la anon key puede leer y escribir (la barrera es el gate de la app).
+DROP POLICY IF EXISTS "shared players read"  ON players;
+DROP POLICY IF EXISTS "shared players write" ON players;
+CREATE POLICY "shared players read"  ON players FOR SELECT USING (true);
+CREATE POLICY "shared players write" ON players FOR ALL    USING (true) WITH CHECK (true);
+
+-- ---------------------------------------------------------------------------
+-- Rosters guardados (compartidos también).
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS rosters (
+  id         TEXT        PRIMARY KEY,
   name       TEXT        NOT NULL,
-  players    JSONB       NOT NULL,
-  metrics    JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
+  slots      JSONB       NOT NULL,             -- { Base: playerId, Pívot: playerId, ... }
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- RLS: cada usuario ve solo sus rosters
-ALTER TABLE saved_rosters ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "users see own rosters" ON saved_rosters;
-CREATE POLICY "users see own rosters" ON saved_rosters
-  USING (auth.uid() = user_id);
-
--- Logs de búsquedas
-CREATE TABLE IF NOT EXISTS search_logs (
-  id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  query         TEXT        NOT NULL,
-  results_count INTEGER,
-  avg_uv_score  DECIMAL(5,2),
-  created_at    TIMESTAMPTZ DEFAULT NOW()
-);
+ALTER TABLE rosters ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "shared rosters read"  ON rosters;
+DROP POLICY IF EXISTS "shared rosters write" ON rosters;
+CREATE POLICY "shared rosters read"  ON rosters FOR SELECT USING (true);
+CREATE POLICY "shared rosters write" ON rosters FOR ALL    USING (true) WITH CHECK (true);

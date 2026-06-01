@@ -110,11 +110,11 @@ export function listRosters(): SavedRoster[] {
 export function saveRoster(name: string, slots: Partial<Record<Position, string>>): SavedRoster {
   const roster: SavedRoster = { id: id(), name: name.trim() || "Quinteto sin nombre", slots, createdAt: new Date().toISOString() };
   write(ROSTERS_KEY, [roster, ...listRosters()].slice(0, 50));
-  // Write-through best-effort a Supabase (multi-dispositivo cuando esté configurado).
+  // Write-through best-effort a la base compartida.
   void (async () => {
     try {
       const { supabase } = await import("@/lib/supabase/client");
-      await supabase().from("saved_rosters").insert({ name: roster.name, players: roster.slots });
+      await supabase().from("rosters").upsert({ id: roster.id, name: roster.name, slots: roster.slots, created_at: roster.createdAt });
     } catch {
       /* sin Supabase → solo local */
     }
@@ -123,8 +123,22 @@ export function saveRoster(name: string, slots: Partial<Record<Position, string>
   return roster;
 }
 
+/** Reemplaza la lista local de rosters (usado al hidratar desde Supabase). */
+export function replaceRostersLocal(rosters: SavedRoster[]): void {
+  write(ROSTERS_KEY, rosters.slice(0, 50));
+  emit();
+}
+
 export function deleteRoster(rosterId: string): void {
   write(ROSTERS_KEY, listRosters().filter((r) => r.id !== rosterId));
+  void (async () => {
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      await supabase().from("rosters").delete().eq("id", rosterId);
+    } catch {
+      /* sin Supabase → solo local */
+    }
+  })();
   emit();
 }
 
@@ -174,24 +188,12 @@ export function savePlayer(player: Omit<Player, "id"> & { id?: string }): Player
     origin: "manual",
     lastUpdated: new Date().toISOString(),
   };
-  const others = listPlayers().filter((p) => p.id !== full.id);
-  write(PLAYERS_KEY, [full, ...others].slice(0, 500));
-  // Write-through best-effort a Supabase (cuando esté configurado).
+  upsertPlayerLocal(full);
+  // Write-through best-effort a la base compartida (cuando Supabase está configurado).
   void (async () => {
     try {
       const { supabase } = await import("@/lib/supabase/client");
-      await supabase()
-        .from("players_cache")
-        .insert({
-          name: full.name,
-          team: full.team,
-          league: full.league,
-          season: full.season,
-          stats: full.stats,
-          salary_usd: full.stats.salary ?? null,
-          source_url: full.sourceUrl ?? null,
-          last_updated: full.lastUpdated,
-        });
+      await supabase().from("players").upsert({ id: full.id, data: full, updated_at: full.lastUpdated });
     } catch {
       /* sin Supabase → solo local */
     }
@@ -200,8 +202,29 @@ export function savePlayer(player: Omit<Player, "id"> & { id?: string }): Player
   return full;
 }
 
+/** Upsert SOLO en localStorage (sin tocar Supabase). Usado por la sincronización de bajada. */
+export function upsertPlayerLocal(player: Player): void {
+  const others = listPlayers().filter((p) => p.id !== player.id);
+  write(PLAYERS_KEY, [player, ...others].slice(0, 500));
+}
+
+/** Reemplaza toda la lista local de jugadores (usado al hidratar desde Supabase). */
+export function replacePlayersLocal(players: Player[]): void {
+  write(PLAYERS_KEY, players.slice(0, 500));
+  emit();
+}
+
 export function deletePlayer(playerId: string): void {
   write(PLAYERS_KEY, listPlayers().filter((p) => p.id !== playerId));
+  // Borrado best-effort en la base compartida.
+  void (async () => {
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      await supabase().from("players").delete().eq("id", playerId);
+    } catch {
+      /* sin Supabase → solo local */
+    }
+  })();
   emit();
 }
 

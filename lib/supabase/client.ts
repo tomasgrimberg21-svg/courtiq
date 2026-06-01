@@ -3,6 +3,11 @@ import { publicEnv } from "@/lib/env";
 
 let client: SupabaseClient | null = null;
 
+/** True si las variables públicas de Supabase están configuradas. */
+export function isSupabaseConfigured(): boolean {
+  return Boolean(publicEnv.supabaseUrl && publicEnv.supabaseAnonKey);
+}
+
 /** Cliente Supabase (anon). Lanza si falta configuración. Lazy singleton. */
 export function supabase(): SupabaseClient {
   if (client) return client;

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Navbar } from "@/components/layout/Navbar";
 import { AccessGate } from "@/components/layout/AccessGate";
 import { WeightsHydrator } from "@/components/settings/WeightsHydrator";
+import { CloudSync } from "@/components/sync/CloudSync";
 
 const oswald = Oswald({
   subsets: ["latin"],
@@ -48,6 +49,7 @@ export default function RootLayout({
         />
         <AccessGate>
           <WeightsHydrator />
+          <CloudSync />
           <Navbar />
           {children}
         </AccessGate>
