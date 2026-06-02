@@ -11,10 +11,10 @@ import {
   useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SAMPLE_PLAYERS } from "@/lib/sample-data";
+import { SAMPLE_PLAYERS, SALARY_MAX } from "@/lib/sample-data";
 import { computeRosterMetrics } from "@/lib/roster";
 import { classifyArchetype } from "@/lib/archetype";
-import { calcDrebPct, calcPOSS, calcEFG, safeDiv, clamp } from "@/lib/moneyball";
+import { calcDrebPct, calcPOSS, calcEFG, safeDiv, clamp, analyzePlayer } from "@/lib/moneyball";
 import type { Player, Position } from "@/types/player";
 import { cn } from "@/lib/utils/cn";
 import { Card } from "@/components/ui/Card";
@@ -129,6 +129,11 @@ export function RosterBuilder() {
   const [fQuery, setFQuery] = useState("");
   const [cmdHint, setCmdHint] = useState<string | null>(null);
 
+  // Sugeridor de refuerzo: criterio + tope salarial.
+  type Criterion = "auto" | "attack" | "defense" | "rebound" | "value";
+  const [criterion, setCriterion] = useState<Criterion>("auto");
+  const [salaryCap, setSalaryCap] = useState("");
+
   // La barra entiende comandos: "u21 tiradores", "pívots lnb" → aplica filtros automáticamente.
   function onQueryChange(raw: string) {
     setFQuery(raw);
@@ -204,22 +209,47 @@ export function RosterBuilder() {
     });
   }
 
-  /** Sugiere un refuerzo: jugador disponible que más aporta al sector más débil. */
-  function suggestReinforcement() {
-    if (!metrics || available.length === 0) return;
-    const weakest = (["attack", "defense", "rebound"] as const).reduce((w, s) =>
-      metrics[s] < metrics[w] ? s : w,
-    );
-    const score = (p: Player) => {
-      if (weakest === "attack") return calcEFG(p.stats);
-      if (weakest === "rebound") return calcDrebPct(p.stats);
-      return safeDiv(p.stats.stl + p.stats.blk, calcPOSS(p.stats));
+  /** Sector más débil del equipo actual (para el modo "auto"). */
+  const weakestSector = useMemo<"attack" | "defense" | "rebound">(() => {
+    if (!metrics) return "attack";
+    return (["attack", "defense", "rebound"] as const).reduce((w, s) => (metrics[s] < metrics[w] ? s : w));
+  }, [metrics]);
+
+  /** Top 3 refuerzos según el criterio elegido (y tope salarial si se puso). */
+  const suggestions = useMemo(() => {
+    if (rosterPlayers.length === 0) return [];
+    const crit = criterion === "auto" ? weakestSector : criterion;
+    const cap = salaryCap.trim() ? Number(salaryCap) : null;
+
+    const score = (p: Player): number => {
+      if (crit === "attack") return calcEFG(p.stats);
+      if (crit === "rebound") return calcDrebPct(p.stats);
+      if (crit === "defense") return safeDiv(p.stats.stl + p.stats.blk, calcPOSS(p.stats));
+      // value: MBPVI por dólar (o MBPVI puro si no hay salario)
+      const layers = analyzePlayer(p.stats, { league: p.league, salaryMax: SALARY_MAX[p.league] }).layers;
+      return layers.uvScore > 0 ? layers.uvScore : layers.mbpvi;
     };
-    const best = [...available].sort((a, b) => score(b) - score(a))[0]!;
-    const targetPos = !slots[best.position] ? best.position : SLOT_ORDER.find((pos) => !slots[pos]);
+
+    return [...available]
+      .filter((p) => (cap !== null && Number.isFinite(cap) ? (p.stats.salary ?? 0) <= cap : true))
+      .map((p) => ({ player: p, value: score(p) }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 3);
+  }, [available, rosterPlayers.length, criterion, weakestSector, salaryCap]);
+
+  /** Coloca un candidato sugerido en su posición (o el primer slot libre). */
+  function addSuggestion(p: Player) {
+    const targetPos = !slots[p.position] ? p.position : SLOT_ORDER.find((pos) => !slots[pos]);
     if (!targetPos) return;
-    setSlots((prev) => ({ ...prev, [targetPos]: best.id }));
+    setSlots((prev) => ({ ...prev, [targetPos]: p.id }));
   }
+
+  const critLabel: Record<typeof criterion, string> = {
+    auto: `sector más débil (${weakestSector === "attack" ? "ataque" : weakestSector === "defense" ? "defensa" : "rebote"})`,
+    attack: "ataque", defense: "defensa", rebound: "rebote", value: "valor (UV/MBPVI)",
+  };
+  const fmtScore = (v: number) =>
+    criterion === "value" ? v.toFixed(2) : criterion === "auto" && weakestSector === "attack" ? `${(v * 100).toFixed(1)}%` : v.toFixed(3);
 
   const teamRadar = metrics
     ? [
@@ -360,12 +390,64 @@ export function RosterBuilder() {
       {/* Análisis */}
       {metrics ? (
         <section className="mt-10 flex flex-col gap-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-heading text-2xl text-ink">Análisis del lineup</h2>
-            <Button variant="outline" size="sm" onClick={suggestReinforcement} disabled={available.length === 0}>
-              Sugerir refuerzo
-            </Button>
-          </div>
+          <h2 className="font-heading text-2xl text-ink">Análisis del lineup</h2>
+
+          {/* Sugeridor de refuerzo */}
+          <Card className="flex flex-col gap-3">
+            <h3 className="font-heading text-sm uppercase text-ink-muted">Sugerir refuerzo</h3>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-heading uppercase text-ink-muted">Reforzar</span>
+                <select
+                  value={criterion}
+                  onChange={(e) => setCriterion(e.target.value as typeof criterion)}
+                  aria-label="Criterio de refuerzo"
+                  className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand"
+                >
+                  <option value="auto">Sector más débil (auto)</option>
+                  <option value="attack">Ataque</option>
+                  <option value="defense">Defensa</option>
+                  <option value="rebound">Rebote</option>
+                  <option value="value">Valor (UV / MBPVI)</option>
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs">
+                <span className="font-heading uppercase text-ink-muted">Tope salarial USD (opcional)</span>
+                <input
+                  value={salaryCap}
+                  onChange={(e) => setSalaryCap(e.target.value)}
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="sin tope"
+                  className="h-9 w-40 rounded-md border border-line bg-panel px-2 text-sm text-ink placeholder:text-ink-muted/50 focus:border-brand"
+                />
+              </label>
+            </div>
+            <p className="text-[11px] text-ink-muted">
+              Top 3 candidatos disponibles por <span className="text-ink">{critLabel[criterion]}</span>
+              {salaryCap.trim() ? ` con salario ≤ $${salaryCap}` : ""}.
+            </p>
+            {suggestions.length === 0 ? (
+              <p className="text-sm text-ink-muted">No hay candidatos disponibles con esos criterios.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {suggestions.map(({ player: p, value }, i) => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-panel px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm text-ink">
+                        <span className="font-numeric text-brand">{i + 1}.</span> {p.name}
+                      </div>
+                      <div className="text-[10px] text-ink-muted">
+                        {p.position} · {p.league} · <span className="font-numeric">{fmtScore(value)}</span>
+                        {p.stats.salary ? ` · $${(p.stats.salary / 1000).toFixed(0)}k` : ""}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => addSuggestion(p)}>+</Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <MetricCard label="Jugadores" value={rosterPlayers.length} />

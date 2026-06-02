@@ -239,11 +239,14 @@ export function getPlayer(playerId: string): Player | null {
   return listPlayers().find((p) => p.id === playerId) ?? null;
 }
 
-/** Crea/actualiza un jugador manual (upsert por id). Genera id si no viene. */
+/**
+ * Crea/actualiza un jugador manual (upsert). Si no viene id, usa el id ESTABLE derivado de
+ * nombre+liga+temporada → cargar dos veces el mismo jugador ACTUALIZA, no duplica.
+ */
 export function savePlayer(player: Omit<Player, "id"> & { id?: string }): Player {
   const full: Player = {
     ...player,
-    id: player.id ?? `manual-${id()}`,
+    id: player.id ?? stablePlayerId(player.name, player.league, player.season),
     origin: "manual",
     lastUpdated: new Date().toISOString(),
   };

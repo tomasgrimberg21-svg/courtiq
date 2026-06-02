@@ -15,7 +15,7 @@ vi.stubGlobal("window", {
   removeEventListener: () => {},
 });
 
-import { importPlayers, listPlayers, stablePlayerId, updatePlayers, deletePlayers } from "./local";
+import { importPlayers, listPlayers, stablePlayerId, updatePlayers, deletePlayers, savePlayer } from "./local";
 import type { Player } from "@/types/player";
 
 function row(name: string, league = "LNB", season = "2024/25", pts = 100): Omit<Player, "id"> {
@@ -95,5 +95,29 @@ describe("updatePlayers / deletePlayers (lote)", () => {
     importPlayers([row("A")]);
     expect(updatePlayers(["no-existe"], { team: "X" })).toBe(0);
     expect(listPlayers()).toHaveLength(1);
+  });
+});
+
+describe("savePlayer (carga individual) — anti-duplicados", () => {
+  it("cargar el mismo jugador dos veces actualiza, no duplica", () => {
+    savePlayer(row("García, J.", "LNB", "2024/25", 100));
+    savePlayer(row("García, J.", "LNB", "2024/25", 250)); // mismo nombre/liga/temp, pts distinto
+    const all = listPlayers();
+    expect(all).toHaveLength(1);
+    expect(all[0]!.stats.pts).toBe(250);
+  });
+
+  it("mismo nombre en distinta temporada → dos jugadores", () => {
+    savePlayer(row("García, J.", "LNB", "2024/25"));
+    savePlayer(row("García, J.", "LNB", "2023/24"));
+    expect(listPlayers()).toHaveLength(2);
+  });
+
+  it("editar (con id existente) mantiene el mismo registro", () => {
+    const created = savePlayer(row("García, J.", "LNB", "2024/25", 100));
+    savePlayer({ ...row("García, J.", "LNB", "2024/25", 999), id: created.id });
+    const all = listPlayers();
+    expect(all).toHaveLength(1);
+    expect(all[0]!.stats.pts).toBe(999);
   });
 });
