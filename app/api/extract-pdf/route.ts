@@ -36,6 +36,19 @@ export async function POST(req: Request): Promise<Response> {
     return errorJson("No se pudo leer el texto del PDF (¿es un PDF escaneado/imagen?).", 422);
   }
 
+  // Modo diagnóstico: ?debug=1 devuelve cómo quedó el texto extraído y qué detectores matchean.
+  const debug = new URL(req.url).searchParams.get("debug") === "1";
+  if (debug) {
+    return json({
+      debug: true,
+      textLength: text.length,
+      lineCount: text.split(/\r?\n/).length,
+      isLnb: isLnbFormat(text),
+      lnbRows: isLnbFormat(text) ? parseLnbSheet(text).length : 0,
+      sample: text.slice(0, 600),
+    });
+  }
+
   if (!text || text.trim().length < 5) {
     return json({
       detection: { stats: {}, detectedCount: 0 },
