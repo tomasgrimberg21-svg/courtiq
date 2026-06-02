@@ -111,10 +111,11 @@ function findAge(text: string): number | undefined {
 
 // --- Detección de TABLA (múltiples jugadores) ---
 
-/** Una fila de tabla detectada: nombre + stats por columna. */
+/** Una fila de tabla detectada: nombre + stats por columna. `position` la setea el parser LNB. */
 export interface TableRowDetection {
   name: string;
   stats: Partial<PlayerStats>;
+  position?: string;
 }
 
 /** Completa stats parciales con ceros (faltantes = 0). gp default 1 para no romper cálculos. */

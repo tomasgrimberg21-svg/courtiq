@@ -37,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
   if (isLnbFormat(text)) {
     const lnb = parseLnbSheet(text);
     if (lnb.length > 0) {
-      const table = lnb.map((r) => ({ name: r.name, stats: r.stats }));
+      const table = lnb.map((r) => ({ name: r.name, stats: r.stats, position: r.position }));
       return json({ detection: { stats: {}, detectedCount: 0 }, table, format: "lnb" });
     }
   }

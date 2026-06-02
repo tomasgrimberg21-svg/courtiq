@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import type { PdfDetection, TableRowDetection } from "@/lib/pdf-extract";
 import { fillStats } from "@/lib/pdf-extract";
 import { savePlayer } from "@/lib/storage/local";
+import type { Position } from "@/types/player";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+
+const POSITIONS: Position[] = ["Base", "Escolta", "Alero", "Ala-Pívot", "Pívot"];
 
 /**
  * Sube un PDF, extrae datos heurísticamente (server-side, sin IA) y:
@@ -89,10 +92,10 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
         team: "—",
         league,
         season: season.trim() || "—",
-        position: "Alero",
+        position: POSITIONS.includes(row.position as Position) ? (row.position as Position) : "Alero",
         stats: fillStats(row.stats),
         statsBasis: "season",
-        confidence: 0.85, // datos oficiales de planilla; posición/equipo quedan por completar
+        confidence: 0.85, // datos oficiales de planilla; posición inferida, equipo por completar
       });
       n++;
     }
@@ -134,6 +137,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
               <thead className="sticky top-0 bg-panel">
                 <tr className="text-ink-muted">
                   <th className="px-2 py-1 text-left font-medium">Jugador</th>
+                  <th className="px-2 py-1 text-left font-medium">Pos.*</th>
                   <th className="px-2 py-1 text-right font-medium">GP</th>
                   <th className="px-2 py-1 text-right font-medium">PTS</th>
                   <th className="px-2 py-1 text-right font-medium">Campos</th>
@@ -143,6 +147,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
                 {table.map((r, i) => (
                   <tr key={i} className="border-t border-line/60">
                     <td className="px-2 py-1 text-ink">{r.name}</td>
+                    <td className="px-2 py-1 text-ink-muted">{r.position ?? "—"}</td>
                     <td className="px-2 py-1 text-right font-numeric text-ink-muted">{r.stats.gp ?? "—"}</td>
                     <td className="px-2 py-1 text-right font-numeric text-brand">{r.stats.pts ?? "—"}</td>
                     <td className="px-2 py-1 text-right font-numeric text-ink-muted">{Object.keys(r.stats).length}</td>
@@ -174,8 +179,8 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
             </label>
           </div>
           <p className="text-[11px] text-ink-muted">
-            Se importan con la liga y temporada elegidas arriba; la posición queda en &quot;Alero&quot; (editá cada
-            jugador después para ajustarla).
+            Se importan con la liga y temporada elegidas arriba. <span className="text-ink">*Pos.</span> es una
+            estimación según el perfil estadístico (la planilla no la trae) — revisala y ajustala por jugador si hace falta.
           </p>
           <div className="flex items-center gap-3">
             <Button type="button" onClick={importTable} disabled={imported > 0}>

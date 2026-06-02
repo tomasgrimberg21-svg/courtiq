@@ -13,10 +13,14 @@
  * Parser PURO y testeable. Devuelve filas listas para `savePlayer`.
  */
 import type { PlayerStats } from "@/types/metrics";
+import type { Position } from "@/types/player";
+import { inferPosition } from "./infer-position";
 
 export interface LnbRow {
   name: string;
   stats: PlayerStats;
+  /** Posición INFERIDA del perfil estadístico (la planilla no la trae). El usuario debería revisarla. */
+  position: Position;
 }
 
 /** Convierte "996,5" o "1.170,6" (formato es-AR) a número. */
@@ -115,7 +119,7 @@ function parseRow(name: string, body: string): LnbRow | null {
     min,
     gp,
   };
-  return { name: cleanName, stats };
+  return { name: cleanName, stats, position: inferPosition(stats) };
 }
 
 /**
