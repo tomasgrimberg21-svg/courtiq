@@ -14,6 +14,8 @@ import { Card } from "@/components/ui/Card";
  *  - si es una tabla de plantel → ofrece importar todas las filas en lote.
  * Nunca guarda sin acción explícita del usuario.
  */
+const IMPORT_LEAGUES = ["LNB", "Liga Provincial ARG", "NBB", "ACB", "EuroLeague", "NBA", "Liga Uruguaya"];
+
 export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => void }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -21,6 +23,8 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
   const [message, setMessage] = useState<string | null>(null);
   const [table, setTable] = useState<TableRowDetection[]>([]);
   const [imported, setImported] = useState(0);
+  const [league, setLeague] = useState("LNB");
+  const [season, setSeason] = useState("2024/25");
 
   async function handleFile(file: File) {
     setStatus("loading");
@@ -66,17 +70,17 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
       savePlayer({
         name: row.name,
         team: "—",
-        league: "LNB",
-        season: "—",
+        league,
+        season: season.trim() || "—",
         position: "Alero",
         stats: fillStats(row.stats),
         statsBasis: "season",
-        confidence: 0.6, // tabla auto-detectada: confianza media, el usuario debería revisar
+        confidence: 0.85, // datos oficiales de planilla; posición/equipo quedan por completar
       });
       n++;
     }
     setImported(n);
-    if (n > 0) setTimeout(() => router.push("/search"), 700);
+    if (n > 0) setTimeout(() => router.push("/search"), 900);
   }
 
   return (
@@ -130,8 +134,31 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
               </tbody>
             </table>
           </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="font-heading uppercase text-ink-muted">Liga</span>
+              <select
+                value={league}
+                onChange={(e) => setLeague(e.target.value)}
+                className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand"
+              >
+                {IMPORT_LEAGUES.map((l) => (
+                  <option key={l} value={l}>{l}</option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs">
+              <span className="font-heading uppercase text-ink-muted">Temporada</span>
+              <input
+                value={season}
+                onChange={(e) => setSeason(e.target.value)}
+                className="h-9 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand"
+              />
+            </label>
+          </div>
           <p className="text-[11px] text-ink-muted">
-            Importados con liga/posición por defecto (LNB / Alero). Editá cada uno después si hace falta.
+            Se importan con la liga y temporada elegidas arriba; la posición queda en &quot;Alero&quot; (editá cada
+            jugador después para ajustarla).
           </p>
           <div className="flex items-center gap-3">
             <Button type="button" onClick={importTable} disabled={imported > 0}>

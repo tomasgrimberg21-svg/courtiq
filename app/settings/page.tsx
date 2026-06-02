@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { WeightsPanel } from "@/components/settings/WeightsPanel";
+import { CloudStatus } from "@/components/settings/CloudStatus";
 
 export const metadata: Metadata = {
   title: "Calibración · CourtIQ",
@@ -14,7 +15,8 @@ export default function SettingsPage() {
         Los pesos por defecto son heurísticos. Ajustalos a tu liga y a tu criterio — todos los UV Score,
         MBPVI y rankings de la app se recalculan con tus valores.
       </p>
-      <div className="mt-8">
+      <div className="mt-8 flex flex-col gap-6">
+        <CloudStatus />
         <WeightsPanel />
       </div>
     </main>
