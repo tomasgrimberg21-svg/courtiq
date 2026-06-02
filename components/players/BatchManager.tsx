@@ -20,6 +20,7 @@ export function BatchManager() {
   const [season, setSeason] = useState("");
   const [team, setTeam] = useState("");
   const [position, setPosition] = useState<string>("");
+  const [age, setAge] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -53,6 +54,14 @@ export function BatchManager() {
     if (season.trim()) patch.season = season.trim();
     if (team.trim()) patch.team = team.trim();
     if (position) patch.position = position as Position;
+    if (age.trim()) {
+      const n = Number(age);
+      if (!Number.isFinite(n) || n < 14 || n > 50) {
+        setMsg("La edad debe ser un número entre 14 y 50.");
+        return;
+      }
+      patch.age = n;
+    }
     if (Object.keys(patch).length === 0) {
       setMsg("Elegí al menos un campo para aplicar.");
       return;
@@ -60,7 +69,7 @@ export function BatchManager() {
     const n = updatePlayers([...sel], patch);
     setMsg(`${n} jugador${n === 1 ? "" : "es"} actualizado${n === 1 ? "" : "s"}.`);
     setSel(new Set());
-    setLeague(""); setSeason(""); setTeam(""); setPosition("");
+    setLeague(""); setSeason(""); setTeam(""); setPosition(""); setAge("");
   }
 
   function deleteSelected() {
@@ -91,7 +100,7 @@ export function BatchManager() {
           </h2>
           {msg && <span className="text-xs text-brand">{msg}</span>}
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
           <select value={league} onChange={(e) => setLeague(e.target.value)} aria-label="Liga"
             className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand">
             <option value="">Liga (sin cambio)</option>
@@ -102,9 +111,11 @@ export function BatchManager() {
             <option value="">Posición (sin cambio)</option>
             {POSITIONS.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
-          <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="Temporada (sin cambio)"
+          <input value={season} onChange={(e) => setSeason(e.target.value)} placeholder="Temporada"
             className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink placeholder:text-ink-muted/50 focus:border-brand" />
-          <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="Equipo (sin cambio)"
+          <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="Equipo"
+            className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink placeholder:text-ink-muted/50 focus:border-brand" />
+          <input value={age} onChange={(e) => setAge(e.target.value)} placeholder="Edad" type="number" inputMode="numeric" aria-label="Edad"
             className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink placeholder:text-ink-muted/50 focus:border-brand" />
         </div>
         <div className="flex flex-wrap gap-2">
@@ -131,6 +142,7 @@ export function BatchManager() {
               <th className="px-3 py-2 text-left font-medium">Equipo</th>
               <th className="px-3 py-2 text-left font-medium">Liga</th>
               <th className="px-3 py-2 text-left font-medium">Pos.</th>
+              <th className="px-3 py-2 text-left font-medium">Edad</th>
               <th className="px-3 py-2 text-left font-medium">Temp.</th>
             </tr>
           </thead>
@@ -147,6 +159,7 @@ export function BatchManager() {
                 <td className="px-3 py-2 text-ink-muted">{p.team}</td>
                 <td className="px-3 py-2 text-ink-muted">{p.league}</td>
                 <td className="px-3 py-2 text-ink-muted">{p.position}</td>
+                <td className="px-3 py-2 text-ink-muted">{p.age ?? "—"}</td>
                 <td className="px-3 py-2 text-ink-muted">{p.season}</td>
               </tr>
             ))}

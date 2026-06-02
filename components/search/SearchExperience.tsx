@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { analyzePlayer, calcDrebPct } from "@/lib/moneyball";
 import { classifyArchetype } from "@/lib/archetype";
+import { parseSearchCommand } from "@/lib/search-command";
 import { SAMPLE_PLAYERS, SALARY_MAX } from "@/lib/sample-data";
 import { getPlayersSnapshot, subscribe } from "@/lib/storage/local";
 import type { LayerResults } from "@/types/metrics";
@@ -52,20 +53,28 @@ export function SearchExperience({ initialQuery = "" }: { initialQuery?: string 
     }));
   }, [manualPlayers]);
 
+  // La barra entiende comandos: "u21 tiradores lnb" se traduce a filtros; el resto es texto libre.
+  const cmd = useMemo(() => parseSearchCommand(query), [query]);
+
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = cmd.text.toLowerCase();
+    const ageMax = cmd.ageMax ?? filters.ageMax;
     return analyzed.filter(({ player, layers }) => {
       if (q && !player.name.toLowerCase().includes(q) && !player.team.toLowerCase().includes(q)) return false;
       if (filters.leagues.length && !filters.leagues.includes(player.league)) return false;
+      if (cmd.league && player.league !== cmd.league) return false;
       if (filters.positions.length && !filters.positions.includes(player.position)) return false;
-      if (filters.archetypes.length && !filters.archetypes.includes(classifyArchetype(player))) return false;
-      if (player.age !== undefined && player.age > filters.ageMax) return false;
+      if (cmd.position && player.position !== cmd.position) return false;
+      const arch = classifyArchetype(player);
+      if (filters.archetypes.length && !filters.archetypes.includes(arch)) return false;
+      if (cmd.archetype && arch !== cmd.archetype) return false;
+      if (player.age !== undefined && player.age > ageMax) return false;
       if (layers.uvScore < filters.uvMin) return false;
       if (layers.efg * 100 < filters.efgMin) return false;
       if (calcDrebPct(player.stats) * 100 < filters.drebMin) return false;
       return true;
     });
-  }, [analyzed, query, filters]);
+  }, [analyzed, cmd, filters]);
 
   const sorted = useMemo(() => {
     const arr = [...results];
@@ -79,18 +88,25 @@ export function SearchExperience({ initialQuery = "" }: { initialQuery?: string 
 
   const manualCount = manualPlayers.length;
 
+  const cmdChips = [
+    cmd.ageMax !== undefined ? `edad ≤ ${cmd.ageMax}` : null,
+    cmd.archetype,
+    cmd.league,
+    cmd.position,
+  ].filter(Boolean) as string[];
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
-      <div className="mb-8 flex flex-col gap-2 sm:flex-row">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row">
         <label htmlFor="q" className="sr-only">
-          Filtrar por nombre o equipo
+          Buscar por nombre o comando
         </label>
         <input
           id="q"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Filtrar por nombre o equipo…"
+          placeholder='Nombre, o comando: "u21 tiradores", "pívots lnb"…'
           className="h-11 flex-1 rounded-lg border border-line bg-panel px-4 text-ink placeholder:text-ink-muted/60 focus:border-brand"
         />
         <Link href="/players/new">
@@ -98,6 +114,13 @@ export function SearchExperience({ initialQuery = "" }: { initialQuery?: string 
             + Cargar jugador
           </Button>
         </Link>
+      </div>
+      <div className="mb-8 flex min-h-[20px] flex-wrap gap-1.5">
+        {cmdChips.map((c) => (
+          <span key={c} className="rounded-full border border-brand/40 px-2 py-0.5 text-[11px] text-brand">
+            {c}
+          </span>
+        ))}
       </div>
 
       {manualCount === 0 && (

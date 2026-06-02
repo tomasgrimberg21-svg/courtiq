@@ -288,7 +288,7 @@ export function deletePlayer(playerId: string): void {
 }
 
 /** Campos editables en lote (identidad, no stats). */
-export type BatchPatch = Partial<Pick<Player, "league" | "season" | "team" | "position">>;
+export type BatchPatch = Partial<Pick<Player, "league" | "season" | "team" | "position" | "age">>;
 
 /** Aplica un patch a varios jugadores por id. Un solo emit() + push por lotes. */
 export function updatePlayers(ids: string[], patch: BatchPatch): number {

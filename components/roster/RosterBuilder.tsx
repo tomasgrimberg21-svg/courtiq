@@ -28,6 +28,7 @@ import { CourtSVG } from "./CourtSVG";
 import { SwapSimulator } from "./SwapSimulator";
 import { ShareButton } from "@/components/common/ShareButton";
 import { saveRoster, deleteRoster, subscribe, getRostersSnapshot, getPlayersSnapshot } from "@/lib/storage/local";
+import { parseSearchCommand } from "@/lib/search-command";
 import type { Archetype } from "@/types/team";
 
 const ROSTER_LEAGUES = ["LNB", "Liga Provincial ARG", "NBB", "ACB", "EuroLeague", "NBA", "Liga Uruguaya"];
@@ -126,6 +127,18 @@ export function RosterBuilder() {
   const [fArch, setFArch] = useState<Archetype | "">("");
   const [fAgeMax, setFAgeMax] = useState(40);
   const [fQuery, setFQuery] = useState("");
+  const [cmdHint, setCmdHint] = useState<string | null>(null);
+
+  // La barra entiende comandos: "u21 tiradores", "pívots lnb" → aplica filtros automáticamente.
+  function onQueryChange(raw: string) {
+    setFQuery(raw);
+    const cmd = parseSearchCommand(raw);
+    const applied: string[] = [];
+    if (cmd.ageMax !== undefined) { setFAgeMax(cmd.ageMax); applied.push(`edad ≤ ${cmd.ageMax}`); }
+    if (cmd.archetype) { setFArch(cmd.archetype); applied.push(cmd.archetype); }
+    if (cmd.league) { setFLeague(cmd.league); applied.push(cmd.league); }
+    setCmdHint(applied.length ? `Aplicado: ${applied.join(" · ")}` : null);
+  }
 
   // Lineup desde la URL (?l=) para compartir. Post-mount a propósito: evita hydration mismatch
   // en esta página prerenderizada (window solo existe en cliente).
@@ -146,7 +159,8 @@ export function RosterBuilder() {
 
   const assignedIds = Object.values(slots).filter(Boolean) as string[];
   const available = useMemo(() => {
-    const q = fQuery.trim().toLowerCase();
+    // Solo el texto sobrante del comando filtra por nombre (ej. "u21 tiradores" → texto vacío).
+    const q = parseSearchCommand(fQuery).text.toLowerCase();
     return pool.filter((p) => {
       if (assignedIds.includes(p.id)) return false;
       if (fLeague && p.league !== fLeague) return false;
@@ -156,6 +170,9 @@ export function RosterBuilder() {
       return true;
     });
   }, [pool, assignedIds, fLeague, fArch, fAgeMax, fQuery]);
+
+  // Cuántos del pool no tienen edad cargada (relevante cuando se filtra por edad).
+  const withoutAge = useMemo(() => pool.filter((p) => p.age === undefined).length, [pool]);
   const rosterPlayers = SLOT_ORDER.map((pos) => (slots[pos] ? resolve(slots[pos]!) : undefined)).filter(
     (p): p is Player => Boolean(p),
   );
@@ -247,11 +264,12 @@ export function RosterBuilder() {
             <input
               type="search"
               value={fQuery}
-              onChange={(e) => setFQuery(e.target.value)}
-              placeholder="Nombre o equipo…"
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder='Nombre, o comando: "u21 tiradores", "pívots lnb"…'
               className="h-9 rounded-md border border-line bg-panel px-3 text-sm text-ink placeholder:text-ink-muted/60 focus:border-brand"
-              aria-label="Filtrar por nombre o equipo"
+              aria-label="Filtrar por nombre o comando"
             />
+            {cmdHint && <span className="text-[11px] text-brand">{cmdHint}</span>}
             <select
               value={fLeague}
               onChange={(e) => setFLeague(e.target.value)}
@@ -289,9 +307,15 @@ export function RosterBuilder() {
                 aria-label="Edad máxima"
               />
             </label>
+            {fAgeMax < 40 && withoutAge > 0 && (
+              <p className="text-[11px] text-uv-gold">
+                ⚠ {withoutAge} jugador{withoutAge === 1 ? "" : "es"} sin edad cargada se muestran igual. Cargá la edad
+                en <a href="/players/manage" className="underline">Gestionar</a> para que el filtro los excluya.
+              </p>
+            )}
             {(fLeague || fArch || fQuery || fAgeMax < 40) && (
               <button
-                onClick={() => { setFLeague(""); setFArch(""); setFQuery(""); setFAgeMax(40); }}
+                onClick={() => { setFLeague(""); setFArch(""); setFQuery(""); setFAgeMax(40); setCmdHint(null); }}
                 className="self-start text-xs text-ink-muted underline hover:text-ink"
               >
                 Limpiar filtros
