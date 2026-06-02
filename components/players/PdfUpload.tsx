@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PdfDetection, TableRowDetection } from "@/lib/pdf-extract";
 import { fillStats } from "@/lib/pdf-extract";
-import { savePlayer } from "@/lib/storage/local";
+import { importPlayers } from "@/lib/storage/local";
 import type { Position } from "@/types/player";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -26,6 +26,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
   const [message, setMessage] = useState<string | null>(null);
   const [table, setTable] = useState<TableRowDetection[]>([]);
   const [imported, setImported] = useState(0);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
   const [league, setLeague] = useState("LNB");
   const [season, setSeason] = useState("2024/25");
 
@@ -85,22 +86,25 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
   }
 
   function importTable() {
-    let n = 0;
-    for (const row of table) {
-      savePlayer({
-        name: row.name,
-        team: "—",
-        league,
-        season: season.trim() || "—",
-        position: POSITIONS.includes(row.position as Position) ? (row.position as Position) : "Alero",
-        stats: fillStats(row.stats),
-        statsBasis: "season",
-        confidence: 0.85, // datos oficiales de planilla; posición inferida, equipo por completar
-      });
-      n++;
-    }
+    const rows = table.map((row) => ({
+      name: row.name,
+      team: "—",
+      league,
+      season: season.trim() || "—",
+      position: POSITIONS.includes(row.position as Position) ? (row.position as Position) : ("Alero" as Position),
+      stats: fillStats(row.stats),
+      statsBasis: "season" as const,
+      confidence: 0.85, // datos oficiales de planilla; posición inferida, equipo por completar
+    }));
+    const summary = importPlayers(rows); // dedup + push por lotes (no duplica al re-importar)
+    const n = summary.added + summary.updated;
     setImported(n);
-    if (n > 0) setTimeout(() => router.push("/search"), 900);
+    setImportMsg(
+      summary.updated > 0
+        ? `${summary.added} nuevos · ${summary.updated} actualizados`
+        : `${summary.added} importados`,
+    );
+    if (n > 0) setTimeout(() => router.push("/search"), 1100);
   }
 
   return (
@@ -186,7 +190,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
             <Button type="button" onClick={importTable} disabled={imported > 0}>
               Importar {table.length} jugadores
             </Button>
-            {imported > 0 && <span className="text-sm text-brand">✓ {imported} importados — redirigiendo…</span>}
+            {imported > 0 && <span className="text-sm text-brand">✓ {importMsg ?? `${imported} importados`} — redirigiendo…</span>}
           </div>
         </div>
       )}

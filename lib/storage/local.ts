@@ -176,6 +176,65 @@ export function listPlayers(): Player[] {
   return read<Player[]>(PLAYERS_KEY, []);
 }
 
+/** Id estable derivado de nombre+liga+temporada → re-importar la misma planilla NO duplica. */
+export function stablePlayerId(name: string, league: string, season: string): string {
+  const slug = `${name}|${league}|${season}`
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `manual-${slug}`;
+}
+
+export interface ImportSummary {
+  added: number;
+  updated: number;
+}
+
+/**
+ * Importa un lote de jugadores con dedup por id estable (nombre+liga+temporada).
+ * Si ya existe, lo actualiza en vez de duplicar. Un solo emit() al final (eficiente para 289+).
+ */
+export function importPlayers(rows: Array<Omit<Player, "id">>): ImportSummary {
+  const existing = listPlayers();
+  const byId = new Map(existing.map((p) => [p.id, p]));
+  let added = 0;
+  let updated = 0;
+  const now = new Date().toISOString();
+
+  for (const row of rows) {
+    const pid = stablePlayerId(row.name, row.league, row.season);
+    if (byId.has(pid)) updated++;
+    else added++;
+    byId.set(pid, { ...row, id: pid, origin: "manual", lastUpdated: now });
+  }
+
+  const merged = [...byId.values()].slice(0, 1000);
+  write(PLAYERS_KEY, merged);
+  // Write-through best-effort por lotes a Supabase (no bloquea la UI).
+  void pushPlayersBatch(merged.filter((p) => rows.some((r) => stablePlayerId(r.name, r.league, r.season) === p.id)));
+  emit();
+  return { added, updated };
+}
+
+/** Sube jugadores a Supabase en tandas (evita 289 requests en paralelo). Best-effort. */
+async function pushPlayersBatch(players: Player[]): Promise<void> {
+  if (players.length === 0) return;
+  try {
+    const { supabase } = await import("@/lib/supabase/client");
+    const sb = supabase();
+    const CHUNK = 100;
+    for (let i = 0; i < players.length; i += CHUNK) {
+      const chunk = players.slice(i, i + CHUNK).map((p) => ({ id: p.id, data: p, updated_at: p.lastUpdated }));
+      await sb.from("players").upsert(chunk);
+    }
+  } catch {
+    /* sin Supabase → solo local */
+  }
+}
+
 export function getPlayer(playerId: string): Player | null {
   return listPlayers().find((p) => p.id === playerId) ?? null;
 }

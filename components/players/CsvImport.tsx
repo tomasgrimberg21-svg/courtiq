@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { parsePlayersCsv, CSV_TEMPLATE, type ParseResult } from "@/lib/csv-import";
-import { savePlayer } from "@/lib/storage/local";
+import { importPlayers } from "@/lib/storage/local";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 
@@ -12,26 +12,26 @@ export function CsvImport() {
   const [text, setText] = useState("");
   const [result, setResult] = useState<ParseResult | null>(null);
   const [imported, setImported] = useState(0);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   function preview() {
     setImported(0);
+    setImportMsg(null);
     setResult(parsePlayersCsv(text));
   }
 
   function doImport() {
     if (!result) return;
-    let n = 0;
-    for (const row of result.ok) {
-      if (row.player) {
-        savePlayer(row.player);
-        n++;
-      }
-    }
+    const rows = result.ok.map((r) => r.player!).filter(Boolean);
+    const summary = importPlayers(rows); // dedup por nombre+liga+temporada + push por lotes
+    const n = summary.added + summary.updated;
     setImported(n);
-    if (n > 0) {
-      // Pequeña pausa visual y vamos a la lista.
-      setTimeout(() => router.push("/search"), 700);
-    }
+    setImportMsg(
+      summary.updated > 0
+        ? `${summary.added} nuevos · ${summary.updated} actualizados (ya existían).`
+        : `${summary.added} jugadores importados.`,
+    );
+    if (n > 0) setTimeout(() => router.push("/search"), 1100);
   }
 
   return (
@@ -114,7 +114,7 @@ export function CsvImport() {
               <Button onClick={doImport} disabled={imported > 0}>
                 Importar {result.ok.length} jugador{result.ok.length === 1 ? "" : "es"}
               </Button>
-              {imported > 0 && <span className="text-sm text-brand">✓ {imported} importados — redirigiendo…</span>}
+              {imported > 0 && <span className="text-sm text-brand">✓ {importMsg ?? `${imported} importados`} — redirigiendo…</span>}
             </div>
           )}
         </Card>
