@@ -11,7 +11,7 @@ import {
   useDroppable,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { SAMPLE_PLAYERS, getSamplePlayer } from "@/lib/sample-data";
+import { SAMPLE_PLAYERS } from "@/lib/sample-data";
 import { computeRosterMetrics } from "@/lib/roster";
 import { classifyArchetype } from "@/lib/archetype";
 import { calcDrebPct, calcPOSS, calcEFG, safeDiv, clamp } from "@/lib/moneyball";
@@ -27,7 +27,14 @@ import { TeamEntropy } from "./TeamEntropy";
 import { CourtSVG } from "./CourtSVG";
 import { SwapSimulator } from "./SwapSimulator";
 import { ShareButton } from "@/components/common/ShareButton";
-import { saveRoster, deleteRoster, subscribe, getRostersSnapshot } from "@/lib/storage/local";
+import { saveRoster, deleteRoster, subscribe, getRostersSnapshot, getPlayersSnapshot } from "@/lib/storage/local";
+import type { Archetype } from "@/types/team";
+
+const ROSTER_LEAGUES = ["LNB", "Liga Provincial ARG", "NBB", "ACB", "EuroLeague", "NBA", "Liga Uruguaya"];
+const ROSTER_ARCHETYPES: Archetype[] = [
+  "Creador", "Tirador", "Slasher", "Defensor Perimetral",
+  "Reboteador", "Protector de Aro", "Stretch Big", "Glue Guy",
+];
 
 const SLOT_ORDER: Position[] = ["Pívot", "Ala-Pívot", "Alero", "Escolta", "Base"];
 const SLOT_POS: Record<Position, { top: string; left: string }> = {
@@ -105,6 +112,20 @@ export function RosterBuilder() {
   const [slots, setSlots] = useState<Partial<Record<Position, string>>>({});
   // Rosters guardados: store reactivo (se actualiza al guardar/borrar sin setState-in-effect).
   const saved = useSyncExternalStore(subscribe, getRostersSnapshot, getRostersSnapshot);
+  // Jugadores importados/cargados (reactivo). El pool del armador = muestra + cargados.
+  const manualPlayers = useSyncExternalStore(subscribe, getPlayersSnapshot, getPlayersSnapshot);
+  const pool = useMemo(() => {
+    const all = [...manualPlayers, ...SAMPLE_PLAYERS];
+    // Dedup por id (por si un manual comparte id con muestra).
+    return all.filter((p, i, arr) => arr.findIndex((x) => x.id === p.id) === i);
+  }, [manualPlayers]);
+  const resolve = (pid: string): Player | undefined => pool.find((p) => p.id === pid);
+
+  // Filtros del pool de disponibles.
+  const [fLeague, setFLeague] = useState("");
+  const [fArch, setFArch] = useState<Archetype | "">("");
+  const [fAgeMax, setFAgeMax] = useState(40);
+  const [fQuery, setFQuery] = useState("");
 
   // Lineup desde la URL (?l=) para compartir. Post-mount a propósito: evita hydration mismatch
   // en esta página prerenderizada (window solo existe en cliente).
@@ -124,8 +145,18 @@ export function RosterBuilder() {
   }, []);
 
   const assignedIds = Object.values(slots).filter(Boolean) as string[];
-  const available = SAMPLE_PLAYERS.filter((p) => !assignedIds.includes(p.id));
-  const rosterPlayers = SLOT_ORDER.map((pos) => (slots[pos] ? getSamplePlayer(slots[pos]!) : undefined)).filter(
+  const available = useMemo(() => {
+    const q = fQuery.trim().toLowerCase();
+    return pool.filter((p) => {
+      if (assignedIds.includes(p.id)) return false;
+      if (fLeague && p.league !== fLeague) return false;
+      if (fArch && classifyArchetype(p) !== fArch) return false;
+      if (p.age !== undefined && p.age > fAgeMax) return false;
+      if (q && !p.name.toLowerCase().includes(q) && !p.team.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [pool, assignedIds, fLeague, fArch, fAgeMax, fQuery]);
+  const rosterPlayers = SLOT_ORDER.map((pos) => (slots[pos] ? resolve(slots[pos]!) : undefined)).filter(
     (p): p is Player => Boolean(p),
   );
 
@@ -205,15 +236,81 @@ export function RosterBuilder() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[280px_1fr]">
-        {/* Disponibles */}
-        <div className="flex flex-col gap-2">
+        {/* Disponibles + filtros */}
+        <div className="flex flex-col gap-3">
           <h2 className="font-heading text-sm uppercase text-ink-muted">
             Disponibles ({available.length})
           </h2>
-          {available.map((p) => (
-            <PlayerChip key={p.id} player={p} />
-          ))}
-          {available.length === 0 && <p className="text-xs text-ink-muted">Quinteto completo.</p>}
+
+          {/* Filtros del pool */}
+          <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel/60 p-3">
+            <input
+              type="search"
+              value={fQuery}
+              onChange={(e) => setFQuery(e.target.value)}
+              placeholder="Nombre o equipo…"
+              className="h-9 rounded-md border border-line bg-panel px-3 text-sm text-ink placeholder:text-ink-muted/60 focus:border-brand"
+              aria-label="Filtrar por nombre o equipo"
+            />
+            <select
+              value={fLeague}
+              onChange={(e) => setFLeague(e.target.value)}
+              aria-label="Filtrar por liga"
+              className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand"
+            >
+              <option value="">Todas las ligas</option>
+              {ROSTER_LEAGUES.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+            <select
+              value={fArch}
+              onChange={(e) => setFArch(e.target.value as Archetype | "")}
+              aria-label="Filtrar por arquetipo"
+              className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink focus:border-brand"
+            >
+              <option value="">Todos los arquetipos</option>
+              {ROSTER_ARCHETYPES.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+            <label className="flex flex-col gap-1">
+              <span className="flex items-baseline justify-between text-xs text-ink-muted">
+                <span>Edad máx.</span>
+                <span className="font-numeric text-brand">{fAgeMax}</span>
+              </span>
+              <input
+                type="range"
+                min={16}
+                max={40}
+                value={fAgeMax}
+                onChange={(e) => setFAgeMax(Number(e.target.value))}
+                className="w-full accent-brand"
+                aria-label="Edad máxima"
+              />
+            </label>
+            {(fLeague || fArch || fQuery || fAgeMax < 40) && (
+              <button
+                onClick={() => { setFLeague(""); setFArch(""); setFQuery(""); setFAgeMax(40); }}
+                className="self-start text-xs text-ink-muted underline hover:text-ink"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+
+          <div className="flex max-h-[520px] flex-col gap-2 overflow-y-auto">
+            {available.map((p) => (
+              <PlayerChip key={p.id} player={p} />
+            ))}
+            {available.length === 0 && (
+              <p className="text-xs text-ink-muted">
+                {pool.length <= SAMPLE_PLAYERS.length
+                  ? "Sin jugadores con esos filtros."
+                  : "Ningún jugador coincide. Probá limpiar filtros."}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Cancha */}
@@ -224,7 +321,7 @@ export function RosterBuilder() {
               <Slot
                 key={pos}
                 pos={pos}
-                player={slots[pos] ? getSamplePlayer(slots[pos]!) ?? null : null}
+                player={slots[pos] ? resolve(slots[pos]!) ?? null : null}
                 onClear={() => setSlots((prev) => {
                   const n = { ...prev };
                   delete n[pos];
