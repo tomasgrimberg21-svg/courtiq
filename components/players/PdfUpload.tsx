@@ -32,9 +32,26 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
     setTable([]);
     setImported(0);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/extract-pdf", { method: "POST", body: fd });
+      // Extraemos el texto en el NAVEGADOR (unpdf/pdfjs funciona acá de forma consistente;
+      // la extracción server-side fallaba en el entorno serverless de Vercel).
+      let text: string;
+      try {
+        const { extractText, getDocumentProxy } = await import("unpdf");
+        const buf = new Uint8Array(await file.arrayBuffer());
+        const pdf = await getDocumentProxy(buf);
+        const result = await extractText(pdf, { mergePages: true });
+        text = Array.isArray(result.text) ? result.text.join("\n") : result.text;
+      } catch {
+        setStatus("error");
+        setMessage("No se pudo leer el PDF (¿está dañado o es una imagen escaneada?).");
+        return;
+      }
+
+      const res = await fetch("/api/extract-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setStatus("error");
