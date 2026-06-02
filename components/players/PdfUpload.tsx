@@ -32,7 +32,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
 
   async function handleFile(file: File) {
     setStatus("loading");
-    setMessage(null);
+    setMessage("Leyendo el PDF…");
     setTable([]);
     setImported(0);
     try {
@@ -51,6 +51,7 @@ export function PdfUpload({ onDetected }: { onDetected: (d: PdfDetection) => voi
         return;
       }
 
+      setMessage("Detectando jugadores…");
       const res = await fetch("/api/extract-pdf", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

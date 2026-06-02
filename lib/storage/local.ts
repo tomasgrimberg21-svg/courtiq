@@ -287,6 +287,44 @@ export function deletePlayer(playerId: string): void {
   emit();
 }
 
+/** Campos editables en lote (identidad, no stats). */
+export type BatchPatch = Partial<Pick<Player, "league" | "season" | "team" | "position">>;
+
+/** Aplica un patch a varios jugadores por id. Un solo emit() + push por lotes. */
+export function updatePlayers(ids: string[], patch: BatchPatch): number {
+  const idSet = new Set(ids);
+  const now = new Date().toISOString();
+  const touched: Player[] = [];
+  const next = listPlayers().map((p) => {
+    if (!idSet.has(p.id)) return p;
+    const updated = { ...p, ...patch, lastUpdated: now };
+    touched.push(updated);
+    return updated;
+  });
+  write(PLAYERS_KEY, next);
+  void pushPlayersBatch(touched);
+  emit();
+  return touched.length;
+}
+
+/** Borra varios jugadores por id. Un solo emit() + borrado best-effort en lote. */
+export function deletePlayers(ids: string[]): number {
+  const idSet = new Set(ids);
+  const before = listPlayers();
+  const next = before.filter((p) => !idSet.has(p.id));
+  write(PLAYERS_KEY, next);
+  void (async () => {
+    try {
+      const { supabase } = await import("@/lib/supabase/client");
+      await supabase().from("players").delete().in("id", ids);
+    } catch {
+      /* sin Supabase → solo local */
+    }
+  })();
+  emit();
+  return before.length - next.length;
+}
+
 // --- Pesos del modelo MBPVI (calibración del usuario) ---
 
 function validWeights(v: unknown): v is MBPVIWeights {

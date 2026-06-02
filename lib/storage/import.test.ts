@@ -15,7 +15,7 @@ vi.stubGlobal("window", {
   removeEventListener: () => {},
 });
 
-import { importPlayers, listPlayers, stablePlayerId } from "./local";
+import { importPlayers, listPlayers, stablePlayerId, updatePlayers, deletePlayers } from "./local";
 import type { Player } from "@/types/player";
 
 function row(name: string, league = "LNB", season = "2024/25", pts = 100): Omit<Player, "id"> {
@@ -67,5 +67,33 @@ describe("importPlayers", () => {
     expect(listPlayers()[0]!.stats.pts).toBe(300);
     // ambas filas resolvieron al mismo id → 1 added, 1 updated
     expect(r.added + r.updated).toBe(2);
+  });
+});
+
+describe("updatePlayers / deletePlayers (lote)", () => {
+  it("aplica un patch de liga/posición a los seleccionados", () => {
+    importPlayers([row("A"), row("B"), row("C")]);
+    const ids = listPlayers().slice(0, 2).map((p) => p.id);
+    const n = updatePlayers(ids, { league: "NBA", position: "Pívot" });
+    expect(n).toBe(2);
+    const all = listPlayers();
+    expect(all.filter((p) => p.league === "NBA")).toHaveLength(2);
+    expect(all.filter((p) => p.position === "Pívot")).toHaveLength(2);
+    // El tercero quedó intacto.
+    expect(all.find((p) => p.league === "LNB")).toBeTruthy();
+  });
+
+  it("borra varios por id", () => {
+    importPlayers([row("A"), row("B"), row("C")]);
+    const ids = listPlayers().slice(0, 2).map((p) => p.id);
+    const n = deletePlayers(ids);
+    expect(n).toBe(2);
+    expect(listPlayers()).toHaveLength(1);
+  });
+
+  it("updatePlayers con ids inexistentes no toca nada", () => {
+    importPlayers([row("A")]);
+    expect(updatePlayers(["no-existe"], { team: "X" })).toBe(0);
+    expect(listPlayers()).toHaveLength(1);
   });
 });

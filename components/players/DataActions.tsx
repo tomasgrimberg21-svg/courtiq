@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import Link from "next/link";
 import { getPlayersSnapshot, subscribe, clearAllData } from "@/lib/storage/local";
 import { playersToCsv } from "@/lib/csv-export";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +32,11 @@ export function DataActions() {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {count > 0 && (
+        <Link href="/players/manage">
+          <Button variant="outline" size="sm">Gestionar ({count})</Button>
+        </Link>
+      )}
       <Button variant="outline" size="sm" onClick={exportCsv} disabled={count === 0}>
         Exportar CSV {count > 0 ? `(${count})` : ""}
       </Button>
